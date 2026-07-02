@@ -1,7 +1,7 @@
 # rikub-2026-orin
 
-Entry point HTTP (FastAPI) yang nerima kiriman foto pemetaan drone (zip)
-dari device lain, lalu otomatis jalanin OpenDroneMap (ODM) buat hasilin
+Foto pemetaan drone (zip) di-`rsync` dari device lain ke Jetson Orin, lalu
+lewat 1 panggilan API (FastAPI) trigger OpenDroneMap (ODM) buat hasilin
 orthomosaic. Jalan di Jetson Orin.
 
 Detail desain & alur lengkap ada di [`docs/PLAN.md`](docs/PLAN.md).
@@ -30,15 +30,24 @@ fastapi run app/main.py --host 0.0.0.0
 
 ## Endpoint
 
-- `POST /projects/{name}/upload` — upload zip foto (multipart, key `file`),
-  balas `202` begitu diterima, proses ODM jalan di background.
+- `GET /health` — cek server hidup.
+- `POST /projects/{name}/process` — trigger ODM. Panggil ini SETELAH zip-nya
+  udah di-rsync ke `~/odm_projects/{name}/upload/{name}.zip` di server.
+  Balas `202` begitu diterima, extract + ODM jalan di background.
 - `GET /projects/{name}/status` — cek status: `processing | done | failed`.
+
+## Kirim foto (dari device lain, ganti IP/path sesuai kebutuhan)
+
+```bash
+ssh jetson@192.168.1.109 "mkdir -p ~/odm_projects/DJI_202510180828_001_lahan4a/upload"
+rsync -avP /home/adedi/Downloads/DJI_202510180828_001_lahan4a.zip \
+  jetson@192.168.1.109:~/odm_projects/DJI_202510180828_001_lahan4a/upload/
+
+curl -X POST http://192.168.1.109:8000/projects/DJI_202510180828_001_lahan4a/process
+```
 
 ## Test
 
 ```
 python test_smoke.py
 ```
-
-curl -X POST http://<ip-orin>:8000/projects/DJI_202510180828_001_lahan4a/upload \
- -F "file=@/home/adedi/Downloads/DJI_202510180828_001_lahan4a.zip"
