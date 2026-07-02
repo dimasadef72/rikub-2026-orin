@@ -29,7 +29,7 @@ def main() -> None:
     print(f"Uploading {zip_path} -> {url} (project: {project_name})")
 
     with open(zip_path, "rb") as f:
-        resp = httpx.post(url, files={"file": f}, timeout=None)
+        resp = httpx.post(url, content=f, timeout=None)
 
     resp.raise_for_status()
     print(resp.json())

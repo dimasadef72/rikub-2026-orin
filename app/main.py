@@ -1,6 +1,6 @@
 import zipfile
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
 from app.odm_runner import run_odm_pipeline
 from app.projects import get_status, project_dir, set_status
@@ -22,10 +22,12 @@ def _process(name: str) -> None:
 
 
 @app.post("/projects/{name}/upload", status_code=202)
-async def upload_project(name: str, request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def upload_project(name: str, request: Request, background_tasks: BackgroundTasks):
     print(f"[upload] menerima upload buat project '{name}'...", flush=True)
-    # ponytail: Content-Length itu ukuran seluruh request (dikit lebih besar dari
-    # file karena overhead multipart), cukup akurat buat estimasi progres.
+    # ponytail: raw body stream (bukan multipart/UploadFile) supaya chunk yang
+    # kebaca itu beneran chunk yang baru nyampe dari socket, bukan hasil baca
+    # dari file sementara yang FastAPI udah buffer penuh duluan sebelum handler
+    # ini jalan (itu yang bikin progress log lama percuma).
     total_size = int(request.headers.get("content-length") or 0)
 
     pdir = project_dir(name)
@@ -38,7 +40,7 @@ async def upload_project(name: str, request: Request, background_tasks: Backgrou
     log_every = 10 * 1024 * 1024
     next_log_at = log_every
     with zip_path.open("wb") as out:
-        while chunk := await file.read(1024 * 1024):
+        async for chunk in request.stream():
             out.write(chunk)
             bytes_received += len(chunk)
             if bytes_received >= next_log_at:
