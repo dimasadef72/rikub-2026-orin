@@ -39,3 +39,6 @@ fastapi run app/main.py --host 0.0.0.0
 ```
 python test_smoke.py
 ```
+
+curl -X POST http://<ip-orin>:8000/projects/DJI_202510180828_001_lahan4a/upload \
+ -F "file=@/home/adedi/Downloads/DJI_202510180828_001_lahan4a.zip"

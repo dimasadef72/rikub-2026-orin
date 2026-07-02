@@ -1,6 +1,6 @@
 import zipfile
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
 
 from app.odm_runner import run_odm_pipeline
 from app.projects import get_status, project_dir, set_status
@@ -17,16 +17,34 @@ def _process(name: str) -> None:
 
 
 @app.post("/projects/{name}/upload", status_code=202)
-async def upload_project(name: str, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def upload_project(name: str, request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    print(f"[upload] menerima upload buat project '{name}'...", flush=True)
+    # ponytail: Content-Length itu ukuran seluruh request (dikit lebih besar dari
+    # file karena overhead multipart), cukup akurat buat estimasi progres.
+    total_size = int(request.headers.get("content-length") or 0)
+
     pdir = project_dir(name)
     upload_dir = pdir / "upload"
     images_dir = pdir / "images"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     zip_path = upload_dir / f"{name}.zip"
+    bytes_received = 0
+    log_every = 10 * 1024 * 1024
+    next_log_at = log_every
     with zip_path.open("wb") as out:
         while chunk := await file.read(1024 * 1024):
             out.write(chunk)
+            bytes_received += len(chunk)
+            if bytes_received >= next_log_at:
+                mb = bytes_received // (1024 * 1024)
+                if total_size:
+                    pct = bytes_received / total_size * 100
+                    print(f"[upload] '{name}': {mb} MB / {total_size / (1024 * 1024):.0f} MB ({pct:.0f}%)", flush=True)
+                else:
+                    print(f"[upload] '{name}': {mb} MB diterima...", flush=True)
+                next_log_at += log_every
+    print(f"[upload] '{name}': upload selesai, total {bytes_received / (1024 * 1024):.1f} MB", flush=True)
 
     try:
         with zipfile.ZipFile(zip_path) as zf:
