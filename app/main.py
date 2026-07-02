@@ -8,6 +8,11 @@ from app.projects import get_status, project_dir, set_status
 app = FastAPI()
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 def _process(name: str) -> None:
     try:
         run_odm_pipeline(project_dir(name))
