@@ -1,22 +1,26 @@
 import tempfile
+import zipfile
 from pathlib import Path
 
-from app.odm_runner import _docker_cmd, _filter_d_images
+from app.main import _extract_split
+from app.odm_runner import _docker_cmd
 from app import projects
 
 
-def test_filter_d_images():
+def test_extract_split_rgb_vs_ms():
     with tempfile.TemporaryDirectory() as tmp:
-        images_dir = Path(tmp) / "images"
-        rgb_images_dir = Path(tmp) / "rgb" / "images"
-        images_dir.mkdir()
-        (images_dir / "a_D.JPG").write_bytes(b"x")
-        (images_dir / "a_T.JPG").write_bytes(b"x")  # thermal, must be skipped
+        zip_path = Path(tmp) / "in.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("a_D.JPG", "x")       # RGB
+            zf.writestr("a_MS_G.JPG", "x")    # multispektral
 
-        _filter_d_images(images_dir, rgb_images_dir)
+        rgb_images_dir = Path(tmp) / "rgb" / "images"
+        ms_images_dir = Path(tmp) / "ms" / "images"
+        _extract_split(zip_path, rgb_images_dir, ms_images_dir)
 
         assert (rgb_images_dir / "a_D.JPG").exists()
-        assert not (rgb_images_dir / "a_T.JPG").exists()
+        assert not (rgb_images_dir / "a_MS_G.JPG").exists()
+        assert (ms_images_dir / "a_MS_G.JPG").exists()
 
 
 def test_docker_cmd_mounts_project_dir():
@@ -38,7 +42,7 @@ def test_status_roundtrip():
 
 
 if __name__ == "__main__":
-    test_filter_d_images()
+    test_extract_split_rgb_vs_ms()
     test_docker_cmd_mounts_project_dir()
     test_status_roundtrip()
     print("ok")

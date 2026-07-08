@@ -41,11 +41,13 @@ jalanin OpenDroneMap (ODM) buat hasilin orthomosaic.
    Jetson Orin (lewat SSH). Resume otomatis kalau koneksi putus di tengah.
 3. Device panggil `POST /projects/sawah1/process` buat trigger proses
    (rsync selesai != server tau otomatis, jadi device yang kasih sinyal).
-4. Server extract zip → `images/`, lalu **hapus zip mentahnya** (udah ga
-   kepake, hemat disk).
-5. Server filter file `*_D.JPG` dari `images/` ke `rgb/images/`, lalu
-   trigger background task: jalanin `docker run opendronemap/odm` (setara
-   command manual yang udah ada). Status project → `processing`.
+4. Server extract zip, **langsung dipisah per file**: nama berakhiran
+   `_D.JPG` → `rgb/images/`, sisanya (multispektral) → `ms/images/`. Lalu
+   **hapus zip mentahnya** (udah ga kepake, hemat disk).
+5. Server trigger background task: jalanin `docker run opendronemap/odm`
+   atas `rgb/images/` (setara command manual yang udah ada). Status
+   project → `processing`. (`ms/images/` belum diproses apa-apa, cuma
+   kesimpen buat kebutuhan nanti.)
 6. Endpoint `process` balas `202 Accepted` — server ga nunggu ODM selesai.
 7. Device polling `GET /projects/sawah1/status` tiap 10-30 detik.
 8. Setelah ODM selesai, background task copy
@@ -82,9 +84,11 @@ skala ini.
   upload/
     {nama}.zip           # zip dari rsync, dihapus otomatis setelah extract sukses
   rgb/
-    images/               # hasil extract zip, filtered *_D.JPG
+    images/               # hasil extract zip, file *_D.JPG doang
     odm_orthophoto/        # output mentah ODM, isinya odm_orthophoto.tif dkk (auto dibikin ODM)
     ...                    # folder2 lain bikinan ODM (opensfm, odm_texturing, dll) — ga disentuh manual
+  ms/
+    images/               # hasil extract zip, file multispektral (bukan *_D.JPG) — belum diproses
   products/
     rgb_orthomosaic.tif    # hasil akhir, ini yang dipakai/diambil
   status.json               # { "state": "uploading|processing|done|failed", "updated_at": ..., "error": null }

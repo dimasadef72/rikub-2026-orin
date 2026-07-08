@@ -11,12 +11,6 @@ ODM_IMAGE = "opendronemap/odm:3.5.4"
 _odm_lock = threading.Lock()
 
 
-def _filter_d_images(images_dir: Path, rgb_images_dir: Path) -> None:
-    rgb_images_dir.mkdir(parents=True, exist_ok=True)
-    for f in images_dir.glob("*_D.JPG"):
-        shutil.copy(f, rgb_images_dir / f.name)
-
-
 def _docker_cmd(project_dir: Path) -> list:
     # -ti dropped from the original manual command: no tty available when
     # run from a background thread.
@@ -34,12 +28,7 @@ def _docker_cmd(project_dir: Path) -> list:
 
 
 def run_odm_pipeline(project_dir: Path) -> None:
-    images_dir = project_dir / "images"
     rgb_dir = project_dir / "rgb"
-    rgb_images_dir = rgb_dir / "images"
-
-    shutil.rmtree(rgb_dir, ignore_errors=True)
-    _filter_d_images(images_dir, rgb_images_dir)
 
     with _odm_lock:
         subprocess.run(_docker_cmd(project_dir), check=True)

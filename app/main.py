@@ -1,4 +1,6 @@
+import shutil
 import zipfile
+from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 
@@ -21,19 +23,36 @@ def _process(name: str) -> None:
         set_status(name, "failed", error=str(exc))
 
 
+def _extract_split(zip_path: Path, rgb_images_dir: Path, ms_images_dir: Path) -> None:
+    """RGB (*_D.JPG) ke rgb_images_dir, sisanya (multispektral) ke ms_images_dir."""
+    rgb_images_dir.mkdir(parents=True, exist_ok=True)
+    ms_images_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            fname = Path(info.filename).name
+            dest_dir = rgb_images_dir if fname.endswith("_D.JPG") else ms_images_dir
+            with zf.open(info) as src, open(dest_dir / fname, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+
 @app.post("/projects/{name}/process", status_code=202)
 async def process_project(name: str, background_tasks: BackgroundTasks):
     """Trigger setelah file di-rsync ke upload/{name}.zip di server."""
     pdir = project_dir(name)
     zip_path = pdir / "upload" / f"{name}.zip"
-    images_dir = pdir / "images"
+    rgb_images_dir = pdir / "rgb" / "images"
+    ms_images_dir = pdir / "ms" / "images"
 
     if not zip_path.exists():
         raise HTTPException(404, f"{zip_path} ga ketemu, rsync dulu sebelum trigger process")
 
+    shutil.rmtree(pdir / "rgb", ignore_errors=True)
+    shutil.rmtree(pdir / "ms", ignore_errors=True)
+
     try:
-        with zipfile.ZipFile(zip_path) as zf:
-            zf.extractall(images_dir)
+        _extract_split(zip_path, rgb_images_dir, ms_images_dir)
     except zipfile.BadZipFile:
         raise HTTPException(400, "File bukan zip yang valid")
 
