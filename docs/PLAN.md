@@ -44,10 +44,16 @@ jalanin OpenDroneMap (ODM) buat hasilin orthomosaic.
 4. Server extract zip, **langsung dipisah per file**: nama berakhiran
    `_D.JPG` → `rgb/images/`, sisanya (multispektral) → `ms/images/`. Lalu
    **hapus zip mentahnya** (udah ga kepake, hemat disk).
-5. Server trigger background task: jalanin `docker run opendronemap/odm`
-   atas `rgb/images/` (setara command manual yang udah ada). Status
-   project → `processing`. (`ms/images/` belum diproses apa-apa, cuma
-   kesimpen buat kebutuhan nanti.)
+5. Server trigger background task, jalanin berurutan (setara command manual
+   yang udah ada):
+   - `docker run opendronemap/odm --fast-orthophoto rgb` atas `rgb/images/`
+     → `products/rgb_orthomosaic.tif`.
+   - Kalau `ms/images/` ada isinya (drone punya kamera multispektral):
+     `docker run opendronemap/odm --fast-orthophoto
+     --radiometric-calibration camera ms` atas `ms/images/` →
+     `products/ms_orthomosaic.tif`, lanjut `gdal_calc.py` hitung NDVI →
+     `products/ndvi.tif`.
+   Status project → `processing` selama ini berlangsung.
 6. Endpoint `process` balas `202 Accepted` — server ga nunggu ODM selesai.
 7. Device polling `GET /projects/sawah1/status` tiap 10-30 detik.
 8. Setelah ODM selesai, background task copy
@@ -88,9 +94,12 @@ skala ini.
     odm_orthophoto/        # output mentah ODM, isinya odm_orthophoto.tif dkk (auto dibikin ODM)
     ...                    # folder2 lain bikinan ODM (opensfm, odm_texturing, dll) — ga disentuh manual
   ms/
-    images/               # hasil extract zip, file multispektral (bukan *_D.JPG) — belum diproses
+    images/               # hasil extract zip, file multispektral (bukan *_D.JPG)
+    odm_orthophoto/        # output ODM buat ms (cuma ada kalau ms/images/ ga kosong)
   products/
-    rgb_orthomosaic.tif    # hasil akhir, ini yang dipakai/diambil
+    rgb_orthomosaic.tif    # hasil akhir RGB
+    ms_orthomosaic.tif      # hasil akhir MS (cuma ada kalau drone punya kamera MS)
+    ndvi.tif                # hasil hitung NDVI dari ms_orthomosaic.tif
   status.json               # { "state": "uploading|processing|done|failed", "updated_at": ..., "error": null }
 ```
 

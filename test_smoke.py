@@ -24,10 +24,17 @@ def test_extract_split_rgb_vs_ms():
 
 
 def test_docker_cmd_mounts_project_dir():
-    cmd = _docker_cmd(Path("/tmp/sawah1"))
+    cmd = _docker_cmd(Path("/tmp/sawah1"), "rgb")
     assert "-ti" not in cmd
     assert "/tmp/sawah1:/datasets" in cmd
     assert cmd[-1] == "rgb"
+
+
+def test_docker_cmd_ms_adds_radiometric_calibration():
+    cmd = _docker_cmd(Path("/tmp/sawah1"), "ms", ["--radiometric-calibration", "camera"])
+    assert cmd[-1] == "ms"
+    assert "--radiometric-calibration" in cmd
+    assert "/datasets/ms" in cmd
 
 
 def test_status_roundtrip():
@@ -44,5 +51,6 @@ def test_status_roundtrip():
 if __name__ == "__main__":
     test_extract_split_rgb_vs_ms()
     test_docker_cmd_mounts_project_dir()
+    test_docker_cmd_ms_adds_radiometric_calibration()
     test_status_roundtrip()
     print("ok")
