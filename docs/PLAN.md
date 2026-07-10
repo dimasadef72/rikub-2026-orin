@@ -49,19 +49,32 @@ jalanin OpenDroneMap (ODM) buat hasilin orthomosaic.
    - `docker run opendronemap/odm --fast-orthophoto rgb` atas `rgb/images/`
      → `products/rgb_orthomosaic.tif`.
    - Kalau `ms/images/` ada isinya (drone punya kamera multispektral):
-     `docker run opendronemap/odm --fast-orthophoto
-     --radiometric-calibration camera ms` atas `ms/images/` →
-     `products/ms_orthomosaic.tif`, lanjut `gdal_calc.py` hitung NDVI →
-     `products/ndvi.tif`.
+     - `docker run opendronemap/odm --fast-orthophoto
+       --radiometric-calibration camera ms` atas `ms/images/` →
+       `products/ms_orthomosaic.tif`.
+     - `gdal_calc.py` hitung NDVI dari band MS → `products/ndvi.tif`.
+     - Align + mask `rgb_orthomosaic.tif` ke extent/area valid NDVI
+       (`gdalwarp` + `gdal_calc.py` per-band + alpha + `gdalbuildvrt` +
+       `gdal_translate`) → `products/rgb_masked_to_ndvi.tif`. Ini yang
+       dikirim sebagai "rgb.tif" ke alat B, bukan orthomosaic mentah,
+       biar align sama NDVI pas ditumpuk di dashboard.
+     - Ambil `capture_at` dari EXIF (`DateTime`/`DateTimeOriginal`) foto
+       RGB pertama.
+     - `rsync` `rgb_masked_to_ndvi.tif` + `ndvi.tif` ke alat portable B
+       (`PORTABLE_B_HOST`/`PORTABLE_B_USER` dari `.env`), ke
+       `storage/imagery/{name}/{capture_at}/{rgb,ndvi}.tif`.
+     - `POST http://{PORTABLE_B_HOST}:8000/imagery/register` — kasih tau
+       alat B ada data baru (field_name = nama project, capture_at, path
+       rgb/ndvi) biar dia insert ke DB-nya sendiri. Jetson ga punya DB
+       imagery — cuma dapur pengolah, alat B yang nyimpen & nampilin.
    Status project → `processing` selama ini berlangsung.
 6. Endpoint `process` balas `202 Accepted` — server ga nunggu ODM selesai.
 7. Device polling `GET /projects/sawah1/status` tiap 10-30 detik.
-8. Setelah ODM selesai, background task copy
-   `odm_orthophoto.tif` → `products/rgb_orthomosaic.tif`, status → `done`
-   (atau `failed` kalau ODM error, simpan log/error message).
-9. Hasil akhir cukup disimpan di filesystem Jetson Orin (server-nya
-   sendiri) — ga perlu endpoint download. Device cuma perlu tau lewat
-   `status` bahwa prosesnya udah `done`.
+8. Setelah semua langkah di atas selesai (termasuk push ke alat B kalau
+   ada MS), status → `done` (atau `failed` kalau ada langkah error, simpan
+   log/error message — termasuk kalau rsync/curl ke alat B gagal).
+9. Hasil RGB-only (tanpa MS) cukup disimpan di filesystem Jetson Orin
+   sendiri — belum ada alat B buat kirim kalau ga ada NDVI buat align.
 
 ## Struktur Folder
 
@@ -97,11 +110,19 @@ skala ini.
     images/               # hasil extract zip, file multispektral (bukan *_D.JPG)
     odm_orthophoto/        # output ODM buat ms (cuma ada kalau ms/images/ ga kosong)
   products/
-    rgb_orthomosaic.tif    # hasil akhir RGB
-    ms_orthomosaic.tif      # hasil akhir MS (cuma ada kalau drone punya kamera MS)
-    ndvi.tif                # hasil hitung NDVI dari ms_orthomosaic.tif
+    rgb_orthomosaic.tif      # hasil akhir RGB
+    ms_orthomosaic.tif        # hasil akhir MS (cuma ada kalau drone punya kamera MS)
+    ndvi.tif                  # hasil hitung NDVI dari ms_orthomosaic.tif
+    rgb_masked_to_ndvi.tif    # RGB di-align+mask ke extent NDVI, ini yang dikirim ke alat B
   status.json               # { "state": "uploading|processing|done|failed", "updated_at": ..., "error": null }
 ```
+
+### Alat portable B
+
+Bukan bagian repo ini — cuma tujuan `rsync` + `curl` di langkah terakhir
+pipeline (lihat Alur #5). Alamat (`PORTABLE_B_HOST`, `PORTABLE_B_USER`)
+diisi di `.env` (lihat `.env.example`), default sekarang masih dummy
+(`portable-b.local`) karena alatnya belum ada secara fisik.
 
 Kenapa `status.json` per-project (bukan database): cuma 1 server, project
 diproses satu-satu (bukan concurrent), jadi baca/tulis file kecil ini cukup

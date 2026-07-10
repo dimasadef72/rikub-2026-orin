@@ -1,1 +1,3 @@
 fastapi[standard]
+Pillow
+python-dotenv
