@@ -15,12 +15,12 @@ async def health():
     return {"status": "ok"}
 
 
-def _run_bg(name: str, pipeline) -> None:
+def _run_bg(name: str, pipeline, step: str) -> None:
     try:
         pipeline(project_dir(name))
-        set_status(name, "done")
+        set_status(name, "done", step=step)
     except Exception as exc:
-        set_status(name, "failed", error=str(exc))
+        set_status(name, "failed", error=str(exc), step=step)
 
 
 def _extract_from_zip(name: str) -> None:
@@ -59,8 +59,8 @@ def _extract_split(zip_path: Path, rgb_images_dir: Path, ms_images_dir: Path) ->
 async def process_project(name: str, background_tasks: BackgroundTasks):
     """Trigger full chain (RGB + NDVI kalau ada MS) setelah file di-rsync ke upload/{name}.zip."""
     _extract_from_zip(name)
-    set_status(name, "processing")
-    background_tasks.add_task(_run_bg, name, run_odm_pipeline)
+    set_status(name, "processing", step="full")
+    background_tasks.add_task(_run_bg, name, run_odm_pipeline, "full")
     return {"project": name, "status": "processing"}
 
 
@@ -71,8 +71,8 @@ async def process_rgb(name: str, background_tasks: BackgroundTasks):
     if not (rgb_images_dir.exists() and any(rgb_images_dir.iterdir())):
         raise HTTPException(404, f"{rgb_images_dir} kosong, jalanin /process dulu buat extract zip-nya")
 
-    set_status(name, "processing")
-    background_tasks.add_task(_run_bg, name, run_rgb_pipeline)
+    set_status(name, "processing", step="rgb")
+    background_tasks.add_task(_run_bg, name, run_rgb_pipeline, "rgb")
     return {"project": name, "status": "processing"}
 
 
@@ -83,14 +83,28 @@ async def process_ndvi(name: str, background_tasks: BackgroundTasks):
     if not (ms_images_dir.exists() and any(ms_images_dir.iterdir())):
         raise HTTPException(400, "Foto multispektral ga ketemu, jalanin /process/rgb dulu")
 
-    set_status(name, "processing")
-    background_tasks.add_task(_run_bg, name, run_ndvi_pipeline)
+    set_status(name, "processing", step="ndvi")
+    background_tasks.add_task(_run_bg, name, run_ndvi_pipeline, "ndvi")
     return {"project": name, "status": "processing"}
+
+
+def _status_or_404(name: str, step: str) -> dict:
+    status = get_status(name, step)
+    if status is None:
+        raise HTTPException(404, f"Belum pernah trigger step '{step}' buat project ini")
+    return status
 
 
 @app.get("/projects/{name}/status")
 async def project_status(name: str):
-    status = get_status(name)
-    if status is None:
-        raise HTTPException(404, "Project ga ditemukan")
-    return status
+    return _status_or_404(name, "full")
+
+
+@app.get("/projects/{name}/process/rgb/status")
+async def process_rgb_status(name: str):
+    return _status_or_404(name, "rgb")
+
+
+@app.get("/projects/{name}/process/ndvi/status")
+async def process_ndvi_status(name: str):
+    return _status_or_404(name, "ndvi")

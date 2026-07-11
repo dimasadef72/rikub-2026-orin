@@ -79,12 +79,18 @@ def test_push_to_portable_b_builds_paths_and_payload():
 def test_status_roundtrip():
     with tempfile.TemporaryDirectory() as tmp:
         projects.BASE_DIR = Path(tmp)
-        assert projects.get_status("sawah1") is None
+        assert projects.get_status("sawah1", "rgb") is None
 
-        projects.set_status("sawah1", "processing")
-        status = projects.get_status("sawah1")
+        projects.set_status("sawah1", "processing", step="rgb")
+        status = projects.get_status("sawah1", "rgb")
         assert status["state"] == "processing"
         assert status["error"] is None
+
+        # step lain tetep independen, ga ke-timpa
+        assert projects.get_status("sawah1", "ndvi") is None
+        projects.set_status("sawah1", "done", step="ndvi")
+        assert projects.get_status("sawah1", "rgb")["state"] == "processing"
+        assert projects.get_status("sawah1", "ndvi")["state"] == "done"
 
 
 if __name__ == "__main__":

@@ -62,9 +62,14 @@ fastapi run app/main.py --host 0.0.0.0
   Butuh `products/rgb_orthomosaic.tif` udah ada (dari `/process` atau
   `/process/rgb` sebelumnya) — `400` kalau foto MS kosong, error di
   `status` kalau `rgb_orthomosaic.tif` belum ada.
-- `GET /projects/{name}/status` — cek status: `processing | done | failed`
-  (kalau `failed`, ada field `error` isinya pesan errornya). Sama buat
-  ketiga endpoint `process*` di atas.
+- `GET /projects/{name}/status` — status `/process` (full chain):
+  `processing | done | failed` (kalau `failed`, ada field `error`).
+- `GET /projects/{name}/process/rgb/status` — status `/process/rgb` doang.
+- `GET /projects/{name}/process/ndvi/status` — status `/process/ndvi` doang.
+
+Ketiganya independen, disimpen terpisah — trigger `/process/ndvi` ga
+nimpa/ganggu status `/process/rgb`. `404` kalau step-nya belum pernah
+di-trigger sama sekali.
 
 ## Kirim foto (dari device lain, ganti IP/nama project sesuai kebutuhan)
 
@@ -91,10 +96,14 @@ curl -X POST http://192.168.1.113:8000/projects/DJI_202510180828_001_lahan4a/pro
 curl -X POST http://192.168.1.113:8000/projects/DJI_202510180828_001_lahan4a/process/ndvi
 ```
 
-Polling status tiap beberapa menit sampai `done`/`failed`:
+Polling status tiap beberapa menit sampai `done`/`failed` — pakai
+`/status` buat full chain, atau `/process/rgb/status` /
+`/process/ndvi/status` kalau trigger-nya manual per-langkah:
 
 ```bash
 curl http://192.168.1.113:8000/projects/DJI_202510180828_001_lahan4a/status
+curl http://192.168.1.113:8000/projects/DJI_202510180828_001_lahan4a/process/rgb/status
+curl http://192.168.1.113:8000/projects/DJI_202510180828_001_lahan4a/process/ndvi/status
 ```
 
 Hasil akhir ada di Jetson, `~/odm_projects/DJI_202510180828_001_lahan4a/products/`:
