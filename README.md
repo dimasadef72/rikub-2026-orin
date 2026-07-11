@@ -47,14 +47,24 @@ fastapi run app/main.py --host 0.0.0.0
 ## Endpoint
 
 - `GET /health` — cek server hidup.
-- `POST /projects/{name}/process` — trigger pipeline. Panggil ini SETELAH
-  zip-nya udah di-rsync ke `~/odm_projects/{name}/upload/{name}.zip` di
-  server. Balas `202` begitu diterima; di background: extract (split
-  RGB/MS) → ODM RGB → ODM MS (kalau ada) → NDVI (kalau ada MS) → crop RGB
-  ke NDVI (kalau ada NDVI) → kirim+daftarin ke alat portable B (kalau ada
-  NDVI).
+- `POST /projects/{name}/process` — trigger full chain. Panggil ini
+  SETELAH zip-nya udah di-rsync ke `~/odm_projects/{name}/upload/{name}.zip`
+  di server. Satu-satunya endpoint yang nyentuh zip: extract (split
+  RGB/MS ke `rgb/images/` & `ms/images/`, lalu hapus zip mentahnya). Balas
+  `202` begitu diterima; di background: ODM RGB → ODM MS (kalau ada foto
+  MS) → NDVI → crop RGB ke NDVI → kirim+daftarin ke alat portable B.
+- `POST /projects/{name}/process/rgb` — ODM RGB doang, baca langsung dari
+  `rgb/images/` yang udah ke-extract (ga nyentuh/butuh zip). `404` kalau
+  foldernya kosong (berarti belum pernah `/process`). Buat coba-coba ulang
+  ODM RGB manual tanpa harus rsync+extract ulang.
+- `POST /projects/{name}/process/ndvi` — ODM MS → NDVI → crop RGB-ke-NDVI →
+  push ke alat B, baca langsung dari `ms/images/` yang udah ke-extract.
+  Butuh `products/rgb_orthomosaic.tif` udah ada (dari `/process` atau
+  `/process/rgb` sebelumnya) — `400` kalau foto MS kosong, error di
+  `status` kalau `rgb_orthomosaic.tif` belum ada.
 - `GET /projects/{name}/status` — cek status: `processing | done | failed`
-  (kalau `failed`, ada field `error` isinya pesan errornya).
+  (kalau `failed`, ada field `error` isinya pesan errornya). Sama buat
+  ketiga endpoint `process*` di atas.
 
 ## Kirim foto (dari device lain, ganti IP/nama project sesuai kebutuhan)
 
@@ -66,10 +76,19 @@ rsync -avP --rsync-path="mkdir -p ~/odm_projects/DJI_202510180828_001_lahan4a/up
   jetson@192.168.1.113:~/odm_projects/DJI_202510180828_001_lahan4a/upload/
 ```
 
-Lanjut trigger proses:
+Lanjut trigger proses (full chain, RGB sampai push ke alat B):
 
 ```bash
 curl -X POST http://192.168.1.113:8000/projects/DJI_202510180828_001_lahan4a/process
+```
+
+Atau jalanin per-langkah manual (mis. mau coba ulang RGB doang, atau NDVI
+doang tanpa extract ulang) — panggil `/process` dulu sekali (buat extract
+zip), abis itu bisa berkali-kali panggil salah satu:
+
+```bash
+curl -X POST http://192.168.1.113:8000/projects/DJI_202510180828_001_lahan4a/process/rgb
+curl -X POST http://192.168.1.113:8000/projects/DJI_202510180828_001_lahan4a/process/ndvi
 ```
 
 Polling status tiap beberapa menit sampai `done`/`failed`:

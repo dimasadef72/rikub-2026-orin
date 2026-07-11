@@ -157,9 +157,9 @@ def _push_to_portable_b(field_name: str, capture_at: str, rgb_tif: Path, ndvi_ti
     urllib.request.urlopen(req, timeout=10)
 
 
-def run_odm_pipeline(project_dir: Path) -> None:
+def run_rgb_pipeline(project_dir: Path) -> None:
+    """ODM RGB doang -> products/rgb_orthomosaic.tif."""
     rgb_dir = project_dir / "rgb"
-    ms_dir = project_dir / "ms"
     products_dir = project_dir / "products"
     products_dir.mkdir(parents=True, exist_ok=True)
 
@@ -168,21 +168,38 @@ def run_odm_pipeline(project_dir: Path) -> None:
     rgb_tif = products_dir / "rgb_orthomosaic.tif"
     shutil.copy(rgb_dir / "odm_orthophoto" / "odm_orthophoto.tif", rgb_tif)
 
-    ms_images_dir = ms_dir / "images"
+
+def run_ndvi_pipeline(project_dir: Path) -> None:
+    """ODM MS -> NDVI -> crop RGB ke NDVI -> push ke alat B. Butuh rgb_orthomosaic.tif (run_rgb_pipeline dulu)."""
+    rgb_dir = project_dir / "rgb"
+    ms_dir = project_dir / "ms"
+    products_dir = project_dir / "products"
+    rgb_tif = products_dir / "rgb_orthomosaic.tif"
+    if not rgb_tif.exists():
+        raise RuntimeError("rgb_orthomosaic.tif belum ada, jalanin /process/rgb dulu")
+
+    with _odm_lock:
+        subprocess.run(
+            _docker_cmd(project_dir, "ms", ["--radiometric-calibration", "camera"]),
+            check=True,
+        )
+    ms_tif = products_dir / "ms_orthomosaic.tif"
+    shutil.copy(ms_dir / "odm_orthophoto" / "odm_orthophoto.tif", ms_tif)
+
+    ndvi_tif = products_dir / "ndvi.tif"
+    _run_ndvi(ms_tif, ndvi_tif)
+
+    rgb_masked_tif = products_dir / "rgb_masked_to_ndvi.tif"
+    _crop_rgb_to_ndvi(rgb_tif, ndvi_tif, rgb_masked_tif)
+
+    capture_at = _capture_at_from_exif(rgb_dir / "images")
+    _push_to_portable_b(project_dir.name, capture_at, rgb_masked_tif, ndvi_tif)
+
+
+def run_odm_pipeline(project_dir: Path) -> None:
+    """Full chain: RGB, lalu (kalau ada foto MS) NDVI+crop+push."""
+    run_rgb_pipeline(project_dir)
+
+    ms_images_dir = project_dir / "ms" / "images"
     if ms_images_dir.exists() and any(ms_images_dir.iterdir()):
-        with _odm_lock:
-            subprocess.run(
-                _docker_cmd(project_dir, "ms", ["--radiometric-calibration", "camera"]),
-                check=True,
-            )
-        ms_tif = products_dir / "ms_orthomosaic.tif"
-        shutil.copy(ms_dir / "odm_orthophoto" / "odm_orthophoto.tif", ms_tif)
-
-        ndvi_tif = products_dir / "ndvi.tif"
-        _run_ndvi(ms_tif, ndvi_tif)
-
-        rgb_masked_tif = products_dir / "rgb_masked_to_ndvi.tif"
-        _crop_rgb_to_ndvi(rgb_tif, ndvi_tif, rgb_masked_tif)
-
-        capture_at = _capture_at_from_exif(rgb_dir / "images")
-        _push_to_portable_b(project_dir.name, capture_at, rgb_masked_tif, ndvi_tif)
+        run_ndvi_pipeline(project_dir)

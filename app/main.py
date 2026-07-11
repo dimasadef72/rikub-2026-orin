@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 
-from app.odm_runner import run_odm_pipeline
+from app.odm_runner import run_ndvi_pipeline, run_odm_pipeline, run_rgb_pipeline
 from app.projects import get_status, project_dir, set_status
 
 app = FastAPI()
@@ -15,12 +15,30 @@ async def health():
     return {"status": "ok"}
 
 
-def _process(name: str) -> None:
+def _run_bg(name: str, pipeline) -> None:
     try:
-        run_odm_pipeline(project_dir(name))
+        pipeline(project_dir(name))
         set_status(name, "done")
     except Exception as exc:
         set_status(name, "failed", error=str(exc))
+
+
+def _extract_from_zip(name: str) -> None:
+    """Extract upload/{name}.zip -> rgb/images + ms/images, lalu hapus zip mentahnya."""
+    pdir = project_dir(name)
+    zip_path = pdir / "upload" / f"{name}.zip"
+    if not zip_path.exists():
+        raise HTTPException(404, f"{zip_path} ga ketemu, rsync dulu sebelum trigger process")
+
+    shutil.rmtree(pdir / "rgb", ignore_errors=True)
+    shutil.rmtree(pdir / "ms", ignore_errors=True)
+
+    try:
+        _extract_split(zip_path, pdir / "rgb" / "images", pdir / "ms" / "images")
+    except zipfile.BadZipFile:
+        raise HTTPException(400, "File bukan zip yang valid")
+
+    zip_path.unlink()  # extract sukses, zip mentah ga kepake lagi
 
 
 def _extract_split(zip_path: Path, rgb_images_dir: Path, ms_images_dir: Path) -> None:
@@ -39,27 +57,34 @@ def _extract_split(zip_path: Path, rgb_images_dir: Path, ms_images_dir: Path) ->
 
 @app.post("/projects/{name}/process", status_code=202)
 async def process_project(name: str, background_tasks: BackgroundTasks):
-    """Trigger setelah file di-rsync ke upload/{name}.zip di server."""
-    pdir = project_dir(name)
-    zip_path = pdir / "upload" / f"{name}.zip"
-    rgb_images_dir = pdir / "rgb" / "images"
-    ms_images_dir = pdir / "ms" / "images"
+    """Trigger full chain (RGB + NDVI kalau ada MS) setelah file di-rsync ke upload/{name}.zip."""
+    _extract_from_zip(name)
+    set_status(name, "processing")
+    background_tasks.add_task(_run_bg, name, run_odm_pipeline)
+    return {"project": name, "status": "processing"}
 
-    if not zip_path.exists():
-        raise HTTPException(404, f"{zip_path} ga ketemu, rsync dulu sebelum trigger process")
 
-    shutil.rmtree(pdir / "rgb", ignore_errors=True)
-    shutil.rmtree(pdir / "ms", ignore_errors=True)
-
-    try:
-        _extract_split(zip_path, rgb_images_dir, ms_images_dir)
-    except zipfile.BadZipFile:
-        raise HTTPException(400, "File bukan zip yang valid")
-
-    zip_path.unlink()  # extract sukses, zip mentah ga kepake lagi
+@app.post("/projects/{name}/process/rgb", status_code=202)
+async def process_rgb(name: str, background_tasks: BackgroundTasks):
+    """Trigger cuma ODM RGB, baca langsung dari rgb/images yang udah ke-extract (ga nyentuh zip)."""
+    rgb_images_dir = project_dir(name) / "rgb" / "images"
+    if not (rgb_images_dir.exists() and any(rgb_images_dir.iterdir())):
+        raise HTTPException(404, f"{rgb_images_dir} kosong, jalanin /process dulu buat extract zip-nya")
 
     set_status(name, "processing")
-    background_tasks.add_task(_process, name)
+    background_tasks.add_task(_run_bg, name, run_rgb_pipeline)
+    return {"project": name, "status": "processing"}
+
+
+@app.post("/projects/{name}/process/ndvi", status_code=202)
+async def process_ndvi(name: str, background_tasks: BackgroundTasks):
+    """Trigger cuma ODM MS + NDVI + crop + push ke alat B. Butuh /process atau /process/rgb udah selesai duluan."""
+    ms_images_dir = project_dir(name) / "ms" / "images"
+    if not (ms_images_dir.exists() and any(ms_images_dir.iterdir())):
+        raise HTTPException(400, "Foto multispektral ga ketemu, jalanin /process/rgb dulu")
+
+    set_status(name, "processing")
+    background_tasks.add_task(_run_bg, name, run_ndvi_pipeline)
     return {"project": name, "status": "processing"}
 
 
