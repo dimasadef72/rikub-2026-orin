@@ -147,9 +147,7 @@ rsync -avP -s --mkpath \
   /home/adedi/Downloads/ndvi.tif \
   'pi@100.64.85.33:rikub-project/server/storage/imagery/Rute Spray Drone/capture-2026-07-11/ndvi.tif'
 
-curl -X POST http://100.64.85.33:8000/imagery/register \
-  -H 'Content-Type: application/json' \
-  -d '{"field_name":"Rute Spray Drone","capture_at":"2026-07-11T00:00:00","rgb_tif_path":"storage/imagery/Rute Spray Drone/capture-2026-07-11/rgb.tif","ndvi_tif_path":"storage/imagery/Rute Spray Drone/capture-2026-07-11/ndvi.tif"}'
+curl -i -X POST http://100.64.85.33:8000/imagery/register -H 'Content-Type: application/json' --data-raw '{"field_name":"Rute Spray Drone","capture_at":"2026-07-11T00:00:00","rgb_tif_path":"storage/imagery/Rute Spray Drone/capture-2026-07-11/rgb.tif","ndvi_tif_path":"storage/imagery/Rute Spray Drone/capture-2026-07-11/ndvi.tif"}'
 ```
 
 Biasanya command manual ini tidak perlu dijalankan, karena `/process` dan
