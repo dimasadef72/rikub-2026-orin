@@ -139,24 +139,17 @@ supaya aman buat path. Nilai `capture_at` di payload tetap ISO asli.
 Command manual yang ekuivalen dengan langkah kirim ke portable B:
 
 ```bash
-PROJECT=DJI_202510180828_001_lahan4a
-CAPTURE_AT=2026-06-16T15:55:00
-CAPTURE_AT_PATH=${CAPTURE_AT//:/}
-REMOTE_DIR=storage/imagery/$PROJECT/$CAPTURE_AT_PATH
-PORTABLE_B_HOST=192.168.1.200
-PORTABLE_B_USER=portable
+rsync -avP --rsync-path="mkdir -p storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500 && rsync" \
+  ~/odm_projects/DJI_202510180828_001_lahan4a/products/rgb_masked_to_ndvi.tif \
+  portable@192.168.1.200:storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500/rgb.tif
 
-rsync -avP --rsync-path="mkdir -p $REMOTE_DIR && rsync" \
-  ~/odm_projects/$PROJECT/products/rgb_masked_to_ndvi.tif \
-  $PORTABLE_B_USER@$PORTABLE_B_HOST:$REMOTE_DIR/rgb.tif
+rsync -avP --rsync-path="mkdir -p storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500 && rsync" \
+  ~/odm_projects/DJI_202510180828_001_lahan4a/products/ndvi.tif \
+  portable@192.168.1.200:storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500/ndvi.tif
 
-rsync -avP --rsync-path="mkdir -p $REMOTE_DIR && rsync" \
-  ~/odm_projects/$PROJECT/products/ndvi.tif \
-  $PORTABLE_B_USER@$PORTABLE_B_HOST:$REMOTE_DIR/ndvi.tif
-
-curl -X POST http://$PORTABLE_B_HOST:8000/imagery/register \
+curl -X POST http://192.168.1.200:8000/imagery/register \
   -H 'Content-Type: application/json' \
-  -d "{\"field_name\":\"$PROJECT\",\"capture_at\":\"$CAPTURE_AT\",\"rgb_tif_path\":\"$REMOTE_DIR/rgb.tif\",\"ndvi_tif_path\":\"$REMOTE_DIR/ndvi.tif\"}"
+  -d '{"field_name":"DJI_202510180828_001_lahan4a","capture_at":"2026-06-16T15:55:00","rgb_tif_path":"storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500/rgb.tif","ndvi_tif_path":"storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500/ndvi.tif"}'
 ```
 
 Biasanya command manual ini tidak perlu dijalankan, karena `/process` dan
