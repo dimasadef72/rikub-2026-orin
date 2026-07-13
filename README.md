@@ -139,17 +139,17 @@ supaya aman buat path. Nilai `capture_at` di payload tetap ISO asli.
 Command manual yang ekuivalen dengan langkah kirim ke portable B:
 
 ```bash
-rsync -avP --rsync-path="mkdir -p storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500 && rsync" \
-  ~/odm_projects/DJI_202510180828_001_lahan4a/products/rgb_masked_to_ndvi.tif \
-  portable@192.168.1.200:storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500/rgb.tif
+rsync -avP --rsync-path="mkdir -p ~/rikub-project/server/storage/imagery/lahan-uji-ndvi/capture-2026-07-04 && rsync" \
+  /home/adedi/Downloads/rgb_masked_to_ndvi.tif \
+  pi@raspberrypi:~/rikub-project/server/storage/imagery/lahan-uji-ndvi/capture-2026-07-04/rgb.tif
 
-rsync -avP --rsync-path="mkdir -p storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500 && rsync" \
-  ~/odm_projects/DJI_202510180828_001_lahan4a/products/ndvi.tif \
-  portable@192.168.1.200:storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500/ndvi.tif
+rsync -avP --rsync-path="mkdir -p ~/rikub-project/server/storage/imagery/lahan-uji-ndvi/capture-2026-07-04 && rsync" \
+  /home/adedi/Downloads/ndvi.tif \
+  pi@raspberrypi:~/rikub-project/server/storage/imagery/lahan-uji-ndvi/capture-2026-07-04/ndvi.tif
 
-curl -X POST http://192.168.1.200:8000/imagery/register \
+curl -X POST http://raspberrypi:8000/imagery/register \
   -H 'Content-Type: application/json' \
-  -d '{"field_name":"DJI_202510180828_001_lahan4a","capture_at":"2026-06-16T15:55:00","rgb_tif_path":"storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500/rgb.tif","ndvi_tif_path":"storage/imagery/DJI_202510180828_001_lahan4a/2026-06-16T155500/ndvi.tif"}'
+  -d '{"field_name":"lahan-uji-ndvi","capture_at":"2026-07-04T00:00:00","rgb_tif_path":"storage/imagery/lahan-uji-ndvi/capture-2026-07-04/rgb.tif","ndvi_tif_path":"storage/imagery/lahan-uji-ndvi/capture-2026-07-04/ndvi.tif"}'
 ```
 
 Biasanya command manual ini tidak perlu dijalankan, karena `/process` dan
