@@ -139,17 +139,17 @@ supaya aman buat path. Nilai `capture_at` di payload tetap ISO asli.
 Command manual yang ekuivalen dengan langkah kirim ke portable B:
 
 ```bash
-rsync -avP --rsync-path="mkdir -p ~/rikub-project/server/storage/imagery/lahan-uji-ndvi/capture-2026-07-04 && rsync" \
+rsync -avP -s --mkpath \
   /home/adedi/Downloads/rgb_masked_to_ndvi.tif \
-  pi@raspberrypi:~/rikub-project/server/storage/imagery/lahan-uji-ndvi/capture-2026-07-04/rgb.tif
+  'pi@100.64.85.33:rikub-project/server/storage/imagery/Rute Spray Drone/capture-2026-07-11/rgb.tif'
 
-rsync -avP --rsync-path="mkdir -p ~/rikub-project/server/storage/imagery/lahan-uji-ndvi/capture-2026-07-04 && rsync" \
+rsync -avP -s --mkpath \
   /home/adedi/Downloads/ndvi.tif \
-  pi@raspberrypi:~/rikub-project/server/storage/imagery/lahan-uji-ndvi/capture-2026-07-04/ndvi.tif
+  'pi@100.64.85.33:rikub-project/server/storage/imagery/Rute Spray Drone/capture-2026-07-11/ndvi.tif'
 
-curl -X POST http://raspberrypi:8000/imagery/register \
+curl -X POST http://100.64.85.33:8000/imagery/register \
   -H 'Content-Type: application/json' \
-  -d '{"field_name":"lahan-uji-ndvi","capture_at":"2026-07-04T00:00:00","rgb_tif_path":"storage/imagery/lahan-uji-ndvi/capture-2026-07-04/rgb.tif","ndvi_tif_path":"storage/imagery/lahan-uji-ndvi/capture-2026-07-04/ndvi.tif"}'
+  -d '{"field_name":"Rute Spray Drone","capture_at":"2026-07-11T00:00:00","rgb_tif_path":"storage/imagery/Rute Spray Drone/capture-2026-07-11/rgb.tif","ndvi_tif_path":"storage/imagery/Rute Spray Drone/capture-2026-07-11/ndvi.tif"}'
 ```
 
 Biasanya command manual ini tidak perlu dijalankan, karena `/process` dan
