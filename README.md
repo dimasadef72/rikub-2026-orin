@@ -30,6 +30,22 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Copy env contoh lalu isi alamat alat portable B:
+
+```bash
+cp .env.example .env
+```
+
+```env
+PORTABLE_B_HOST=192.168.1.200
+PORTABLE_B_USER=portable
+```
+
+- `PORTABLE_B_HOST` dipakai buat tujuan `rsync` dan URL register:
+  `http://{PORTABLE_B_HOST}:8000/imagery/register`.
+- `PORTABLE_B_USER` dipakai buat login SSH/rsync:
+  `{PORTABLE_B_USER}@{PORTABLE_B_HOST}`.
+
 ## Jalanin (development)
 
 ```
@@ -70,6 +86,81 @@ fastapi run app/main.py --host 0.0.0.0
 Ketiganya independen, disimpen terpisah — trigger `/process/ndvi` ga
 nimpa/ganggu status `/process/rgb`. `404` kalau step-nya belum pernah
 di-trigger sama sekali.
+
+## Detail `/process/ndvi`
+
+Endpoint:
+
+```bash
+curl -X POST http://192.168.1.113:8000/projects/{name}/process/ndvi
+```
+
+Yang dicek saat request masuk:
+
+- `~/odm_projects/{name}/ms/images/` harus ada dan berisi foto MS.
+- Kalau kosong, API langsung balas `400`.
+- `products/rgb_orthomosaic.tif` dicek di background task. Kalau belum ada,
+  status NDVI jadi `failed` dengan pesan `rgb_orthomosaic.tif belum ada,
+  jalanin /process/rgb dulu`.
+
+Yang dijalankan di background:
+
+1. ODM multispektral dari `ms/images/`.
+2. Copy hasil ODM MS ke `products/ms_orthomosaic.tif`.
+3. Hitung NDVI dari band MS ke `products/ndvi.tif`.
+4. Align + crop RGB ke grid NDVI, hasilnya
+   `products/rgb_masked_to_ndvi.tif`.
+5. Ambil `capture_at` dari EXIF foto RGB pertama. Kalau EXIF tidak ada,
+   fallback ke waktu server.
+6. `rsync` dua file ke alat portable B:
+   - `products/rgb_masked_to_ndvi.tif` -> `storage/imagery/{name}/{capture_at_path}/rgb.tif`
+   - `products/ndvi.tif` -> `storage/imagery/{name}/{capture_at_path}/ndvi.tif`
+7. Trigger API portable B:
+
+```http
+POST http://{PORTABLE_B_HOST}:8000/imagery/register
+Content-Type: application/json
+```
+
+Payload yang dikirim:
+
+```json
+{
+  "field_name": "{name}",
+  "capture_at": "2026-06-16T15:55:00",
+  "rgb_tif_path": "storage/imagery/{name}/{capture_at_path}/rgb.tif",
+  "ndvi_tif_path": "storage/imagery/{name}/{capture_at_path}/ndvi.tif"
+}
+```
+
+Catatan: `capture_at_path` adalah `capture_at` yang karakter `:`-nya dihapus
+supaya aman buat path. Nilai `capture_at` di payload tetap ISO asli.
+
+Command manual yang ekuivalen dengan langkah kirim ke portable B:
+
+```bash
+PROJECT=DJI_202510180828_001_lahan4a
+CAPTURE_AT=2026-06-16T15:55:00
+CAPTURE_AT_PATH=${CAPTURE_AT//:/}
+REMOTE_DIR=storage/imagery/$PROJECT/$CAPTURE_AT_PATH
+PORTABLE_B_HOST=192.168.1.200
+PORTABLE_B_USER=portable
+
+rsync -avP --rsync-path="mkdir -p $REMOTE_DIR && rsync" \
+  ~/odm_projects/$PROJECT/products/rgb_masked_to_ndvi.tif \
+  $PORTABLE_B_USER@$PORTABLE_B_HOST:$REMOTE_DIR/rgb.tif
+
+rsync -avP --rsync-path="mkdir -p $REMOTE_DIR && rsync" \
+  ~/odm_projects/$PROJECT/products/ndvi.tif \
+  $PORTABLE_B_USER@$PORTABLE_B_HOST:$REMOTE_DIR/ndvi.tif
+
+curl -X POST http://$PORTABLE_B_HOST:8000/imagery/register \
+  -H 'Content-Type: application/json' \
+  -d "{\"field_name\":\"$PROJECT\",\"capture_at\":\"$CAPTURE_AT\",\"rgb_tif_path\":\"$REMOTE_DIR/rgb.tif\",\"ndvi_tif_path\":\"$REMOTE_DIR/ndvi.tif\"}"
+```
+
+Biasanya command manual ini tidak perlu dijalankan, karena `/process` dan
+`/process/ndvi` sudah menjalankan `rsync` + register API otomatis.
 
 ## Kirim foto (dari device lain, ganti IP/nama project sesuai kebutuhan)
 
@@ -114,6 +205,37 @@ Hasil akhir ada di Jetson, `~/odm_projects/DJI_202510180828_001_lahan4a/products
 Kalau ada MS/NDVI, `rgb_masked_to_ndvi.tif` + `ndvi.tif` otomatis ke-`rsync`
 dan ke-daftarin (`POST /imagery/register`) ke alat portable B — ga perlu
 langkah manual tambahan.
+
+## Struktur Folder Project
+
+Di Jetson, satu project disimpan di:
+
+```text
+~/odm_projects/{name}/
+  upload/{name}.zip              # file awal dari rsync, dihapus setelah extract sukses
+  rgb/images/                    # foto RGB hasil extract
+  ms/images/                     # foto multispektral hasil extract
+  rgb/odm_orthophoto/            # output ODM RGB
+  ms/odm_orthophoto/             # output ODM MS
+  products/
+    rgb_orthomosaic.tif
+    ms_orthomosaic.tif
+    ndvi.tif
+    rgb_masked_to_ndvi.tif
+```
+
+## Troubleshooting
+
+- `404 ... upload/{name}.zip ga ketemu` — file zip belum di-`rsync` ke path
+  yang benar, atau nama project beda.
+- `400 Foto multispektral ga ketemu` — project belum pernah diextract lewat
+  `/process`, atau zip tidak berisi foto MS.
+- `failed: rgb_orthomosaic.tif belum ada` — jalankan `/process/rgb` dulu,
+  tunggu `done`, baru trigger `/process/ndvi`.
+- `failed` saat `rsync` — cek `.env`, SSH key, user/host portable B, dan
+  apakah `rsync` tersedia di kedua device.
+- `failed` saat register — cek API portable B hidup di
+  `http://{PORTABLE_B_HOST}:8000/imagery/register`.
 
 ## Test
 
